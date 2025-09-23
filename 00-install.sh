@@ -120,7 +120,7 @@ echo "Instalando de configurando postgreSQL..."
 sudo ./03-postgresql.sh || exit 1
 
 echo "Configurando usuario GVM..."
-sudo ./04-create-user-gvm.sh || exit 1
+sudo ./04-create_user_gvm.sh || exit 1
 
 echo "Instalando de configurando NodeJS..."
 sudo ./05-nodejs.sh || exit 1
@@ -148,6 +148,6 @@ echo "Compilando OSPD_OPENVAS versão $OSPD_OPENVAS..."
 sudo OSPD_OPENVAS="$OSPD_OPENVAS" ./12-build_ospd-openvas.sh || exit 1
 
 echo "Compilando NOTUS_SCANNER versão $NOTUS_SCANNER..."
-sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./13-build_notus-scanner.sh || exit 1
+sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./13_build_notus-scanner.sh || exit 1
 
 
