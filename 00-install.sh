@@ -7,15 +7,15 @@ NC='\033[0m'
 
 # Ultimo teste utilizado
 # Ubuntu 24.04 - Setembro 2025
-# export GVM_LIBS="22.28.1"
-# export GVMD="26.3.0"
-# export PG_GVM="22.6.11"
-# export GSA="26.0.0"
-# export GSAD="24.5.4"
-# export OPENVAS_SMB="22.5.10"
-# export OPENVAS_SCANNER="23.28.0"
-# export OSPD_OPENVAS="22.9.0"
-# export NOTUS_SCANNER="22.7.2"
+export GVM_LIBS="22.28.1"
+export GVMD="26.3.0"
+export PG_GVM="22.6.11"
+export GSA="26.0.0"
+export GSAD="24.5.4"
+export OPENVAS_SMB="22.5.10"
+export OPENVAS_SCANNER="23.28.0"
+export OSPD_OPENVAS="22.9.0"
+export NOTUS_SCANNER="22.7.2"
 
 if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}ERRO: Este script precisa ser executado com privilégios de root.${NC}"
@@ -28,39 +28,39 @@ echo "Permissão de root verificada. Iniciando..."
 echo "Obtendo as versões mais recentes dos componentes GVM do GitHub..."
 # GVM_LIBS
 # https://github.com/greenbone/gvm-libs/releases
-export GVM_LIBS=$(curl -s https://api.github.com/repos/greenbone/gvm-libs/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+##export GVM_LIBS=$(curl -s https://api.github.com/repos/greenbone/gvm-libs/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # GVMD
 # https://github.com/greenbone/gvmd/releases
-export GVMD=$(curl -s https://api.github.com/repos/greenbone/gvmd/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export GVMD=$(curl -s https://api.github.com/repos/greenbone/gvmd/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # PG_GVM
 # https://github.com/greenbone/pg-gvm/releases
-export PG_GVM=$(curl -s https://api.github.com/repos/greenbone/pg-gvm/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export PG_GVM=$(curl -s https://api.github.com/repos/greenbone/pg-gvm/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # GSA
 # https://github.com/greenbone/gsa/releases
-export GSA=$(curl -s https://api.github.com/repos/greenbone/gsa/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export GSA=$(curl -s https://api.github.com/repos/greenbone/gsa/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # GSAD
 # https://github.com/greenbone/gsad/releases
-export GSAD=$(curl -s https://api.github.com/repos/greenbone/gsad/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export GSAD=$(curl -s https://api.github.com/repos/greenbone/gsad/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # OPENVAS_SMB
 # https://github.com/greenbone/openvas-smb/releases
-export OPENVAS_SMB=$(curl -s https://api.github.com/repos/greenbone/openvas-smb/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export OPENVAS_SMB=$(curl -s https://api.github.com/repos/greenbone/openvas-smb/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # OPENVAS_SCANNER
 # https://github.com/greenbone/openvas-scanner/releases
-export OPENVAS_SCANNER=$(curl -s https://api.github.com/repos/greenbone/openvas-scanner/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export OPENVAS_SCANNER=$(curl -s https://api.github.com/repos/greenbone/openvas-scanner/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # OSPD_OPENVAS
 # https://github.com/greenbone/ospd-openvas/releases
-export OSPD_OPENVAS=$(curl -s https://api.github.com/repos/greenbone/ospd-openvas/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export OSPD_OPENVAS=$(curl -s https://api.github.com/repos/greenbone/ospd-openvas/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 # NOTUS_SCANNER
 # https://github.com/greenbone/notus-scanner/releases
-export NOTUS_SCANNER=$(curl -s https://api.github.com/repos/greenbone/notus-scanner/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+#export NOTUS_SCANNER=$(curl -s https://api.github.com/repos/greenbone/notus-scanner/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
 
 
 # --- Verificação se todas as variáveis de versão foram preenchidas ---
@@ -148,6 +148,6 @@ echo "Compilando OSPD_OPENVAS versão $OSPD_OPENVAS..."
 sudo OSPD_OPENVAS="$OSPD_OPENVAS" ./12-build_ospd-openvas.sh || exit 1
 
 echo "Compilando NOTUS_SCANNER versão $NOTUS_SCANNER..."
-sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./13_build_notus-scanner.sh || exit 1
+sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./13-build_notus-scanner.sh || exit 1
 
 
