@@ -114,40 +114,40 @@ if [[ "${confirm,,}" != "s" ]]; then
 fi
 
 echo "Instalando de configurando dependencias..."
-sudo ./02-dependencias.sh
+sudo ./02-dependencias.sh || exit 1
 
 echo "Instalando de configurando postgreSQL..."
-sudo ./03-postgresql.sh
+sudo ./03-postgresql.sh || exit 1
 
 echo "Configurando usuario GVM..."
-sudo ./04-create-user-gvm.sh
+sudo ./04-create-user-gvm.sh || exit 1
 
 echo "Instalando de configurando NodeJS..."
-sudo ./05-nodejs.sh
+sudo ./05-nodejs.sh || exit 1
 
 echo "Compilando gvm-libs versão $GVM_LIBS..."
-sudo GVM_LIBS="$GVM_LIBS" ./06-build_gvm_libs.sh
+sudo GVM_LIBS="$GVM_LIBS" ./06-build_gvm_libs.sh || exit 1
 
 echo "Compilando build_gvmd versão $GVMD..."
-sudo GVMD="$GVMD" ./07-build_gvmd.sh
+sudo GVMD="$GVMD" ./07-build_gvmd.sh || exit 1
 
 echo "Compilando build_gvmd versão $PG_GVM..."
-sudo PG_GVM="$PG_GVM" ./08-build_pg-gvm.sh
+sudo PG_GVM="$PG_GVM" ./08-build_pg-gvm.sh || exit 1
 
 echo "Compilando GSA versão $GSA..."
-sudo GSA="$GSA" ./09-build_gsa.sh
+sudo GSA="$GSA" ./09-build_gsa.sh || exit 1
 
 echo "Compilando GSAD versão $GSAD..."
-sudo GSAD="$GSAD" ./10-build_gsad.sh
+sudo GSAD="$GSAD" ./10-build_gsad.sh || exit 1
 
 echo "Compilando OPENVAS_SMB versão $OPENVAS_SMB..."
 echo "Compilando OPENVAS_SCANNER versão $OPENVAS_SCANNER..."
-sudo OPENVAS_SMB="$OPENVAS_SMB" OPENVAS_SCANNER="$OPENVAS_SCANNER" ./11-build_scanners.sh
+sudo OPENVAS_SMB="$OPENVAS_SMB" OPENVAS_SCANNER="$OPENVAS_SCANNER" ./11-build_scanners.sh || exit 1
 
 echo "Compilando OSPD_OPENVAS versão $OSPD_OPENVAS..."
-sudo OSPD_OPENVAS="$OSPD_OPENVAS" ./12-build_ospd-openvas.sh
+sudo OSPD_OPENVAS="$OSPD_OPENVAS" ./12-build_ospd-openvas.sh || exit 1
 
 echo "Compilando NOTUS_SCANNER versão $NOTUS_SCANNER..."
-sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./13-build_notus-scanner.sh
+sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./13-build_notus-scanner.sh || exit 1
 
 
