@@ -150,4 +150,33 @@ sudo OSPD_OPENVAS="$OSPD_OPENVAS" ./12-build_ospd-openvas.sh || exit 1
 echo "Compilando NOTUS_SCANNER versão $NOTUS_SCANNER..."
 sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./13-build_notus-scanner.sh || exit 1
 
+echo "Instalando greenbone-feed-sync..."
+sudo ./14-install_feed-sync.sh || exit 1
+
+echo "Instalando gvm-tools..."
+sudo ./15-install_gvm-tools.sh || exit 1
+
+echo "Configurando Redis..."
+sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./16-configure_redis.sh || exit 1
+
+echo "Configurando Redis..."
+sudo ./17-optimize_redis_system.sh || exit 1
+
+echo "Configurando Mosquitto MQTT Broker..."
+sudo ./18-configure_mosquitto.sh || exit 1
+
+echo "Configurando permissões do usuario GVM..."
+sudo ./19-set_gvm_permissions.sh || exit 1
+
+echo "Atualização dos Feeds..."
+sudo ./20-update_gvm_feeds.sh || exit 1
+
+echo "Verificando atualização dos feeds por partes..."
+sudo ./21-update_data_feeds.sh || exit 1
+
+echo "Configurando a validação de integridade dos feeds..."
+sudo ./22-setup_feed_validation.sh || exit 1
+
+echo "Configurando serviços..."
+sudo ./23-setup_services.sh || exit 1
 
