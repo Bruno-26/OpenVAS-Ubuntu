@@ -12,6 +12,31 @@ source "$(dirname "$0")/style.sh"
 STATE_FILE=".install_progress"
 STEP_MODE=0
 
+handle_error() {
+    local exit_code=$?
+    local line_number=$1
+    local command=$2
+
+    echo "" # Linha em branco para separar
+    print_error "================================================================="
+    print_error " ERRO: A instalação falhou!"
+    print_error "================================================================="
+    print_error "  - Causa:      O comando falhou na linha ${line_number}"
+    print_error "  - Comando:    '${command}'"
+    print_error "  - Código de Saída: ${exit_code}"
+    echo ""
+    print_info "  Por favor, verifique a saída de erro acima para diagnosticar o problema."
+    print_info "  Quando o problema for resolvido, você pode executar o script novamente"
+    print_info "  para continuar a instalação de onde parou."
+    echo ""
+
+    # Sai do script com o código de erro original
+    exit $exit_code
+}
+
+trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
+
+
 # --- Função para obter a versão mais recente do GitHub ---
 get_latest_version() {
     local repo_url="https://api.github.com/repos/$1/releases/latest"

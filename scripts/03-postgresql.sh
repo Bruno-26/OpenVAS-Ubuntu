@@ -14,7 +14,7 @@
 # --- Configurações de Segurança e Estilo ---
 set -e
 set -o pipefail
-source "$(dirname "$0")/style.sh"
+source "$(dirname "$0")/../style.sh"
 
 # --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
