@@ -10,6 +10,7 @@ source "$(dirname "$0")/style.sh"
 
 # --- Arquivo de Estado ---
 STATE_FILE=".install_progress"
+STEP_MODE=0
 
 # --- Função para obter a versão mais recente do GitHub ---
 get_latest_version() {
@@ -29,11 +30,19 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Argumento para reiniciar a instalação
-if [ "$1" == "--reset" ]; then
-    print_warning "O arquivo de progresso da instalação ($STATE_FILE) será removido."
-    rm -f "$STATE_FILE"
-    print_success "Progresso reiniciado. A instalação começará do zero."
-fi
+for arg in "$@"; do
+    case $arg in
+        --reset)
+            print_warning "O arquivo de progresso da instalação ($STATE_FILE) será removido."
+            rm -f "$STATE_FILE"
+            print_success "Progresso reiniciado. A instalação começará do zero."
+            ;;
+        --steps)
+            STEP_MODE=1
+            print_info "Modo passo a passo ATIVADO. O script irá pausar após cada etapa."
+            ;;
+    esac
+done
 
 touch "$STATE_FILE"
 
@@ -149,14 +158,21 @@ run_task() {
     print_success "Etapa '${task_name}' concluída com sucesso."
     print_success "-------------------------------------------"
     echo ""
+
+    if [ "$STEP_MODE" -eq 1 ]; then
+        echo ""
+        read -p "Pressione [Enter] para continuar para a próxima etapa..."
+        echo ""
+    fi
+
 }
 
 # Itera sobre todas as tarefas e as executa
 for i in "${!TASKS[@]}"; do
     task="${TASKS[$i]}"
     script="${SCRIPTS[$i]}"
-    message="Executando etapa: ${task}..."
-    run_task "$task" "$script" "$message"
+    message="Executando etapa: ${script}..."
+    run_task "$script" "$script" "$message"
 done
 
 echo ""

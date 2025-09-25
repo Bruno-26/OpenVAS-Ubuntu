@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source "../style.sh"
+source "$(dirname "$0")/../style.sh"
 
 # ==================================================================
 # Script: 02-dependencias.sh
