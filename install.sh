@@ -139,21 +139,14 @@ fi
 
 # --- Lógica de Execução e Estado ---
 # Define a lista de tarefas e os scripts correspondentes
-declare -a TASKS=(
-    "dependencias" "postgresql" "create_user_gvm" "nodejs"
-    "build_gvm_libs" "build_gvmd" "build_pg-gvm" "build_gsa"
-    "build_gsad" "build_scanners" "build_ospd-openvas" "build_notus-scanner"
-    "install_feed-sync" "install_gvm-tools" "configure_redis" "optimize_redis_system"
-    "configure_mosquitto" "set_gvm_permissions" "update_gvm_feeds" "update_data_feeds"
-    "setup_feed_validation" "setup_services"
-)
 declare -a SCRIPTS=(
     "./02-dependencias.sh" "./03-postgresql.sh" "./04-create_user_gvm.sh" "./05-nodejs.sh"
     "./06-build_gvm_libs.sh" "./07-build_gvmd.sh" "./08-build_pg-gvm.sh" "./09-build_gsa.sh"
     "./10-build_gsad.sh" "./11-build_scanners.sh" "./12-build_ospd-openvas.sh" "./13-build_notus-scanner.sh"
     "./14-install_feed-sync.sh" "./15-install_gvm-tools.sh" "./16-configure_redis.sh" "./17-optimize_redis_system.sh"
     "./18-configure_mosquitto.sh" "./19-set_gvm_permissions.sh" "./20-update_gvm_feeds.sh" "./21-update_data_feeds.sh"
-    "./22-setup_feed_validation.sh" "./23-setup_services.sh"
+    "./22-setup_feed_validation.sh" "./23-setup_services.sh" "./24-setup_gvm_scanner.sh" "./25-manage_gvm_users.sh"
+    "./26-set_feed_owner.sh" "./27-check_gvm_access.sh"
 )
 
 # Função para executar uma tarefa, verificando o estado antes
@@ -193,8 +186,7 @@ run_task() {
 }
 
 # Itera sobre todas as tarefas e as executa
-for i in "${!TASKS[@]}"; do
-    task="${TASKS[$i]}"
+for i in "${!SCRIPTS[@]}"; do
     script="${SCRIPTS[$i]}"
     message="Executando etapa: ${script}..."
     run_task "$script" "$script" "$message"
