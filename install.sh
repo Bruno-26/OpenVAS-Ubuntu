@@ -36,17 +36,6 @@ handle_error() {
 
 trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
 
-
-# --- Função para obter a versão mais recente do GitHub ---
-get_latest_version() {
-    local repo_url="https://api.github.com/repos/$1/releases/latest"
-    if command -v jq &> /dev/null; then
-        curl -s "$repo_url" | jq -r '.tag_name' | sed 's/^v//'
-    else
-        curl -s "$repo_url" | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/'
-    fi
-}
-
 # --- Verificação de Root e Argumentos ---
 if [ "$EUID" -ne 0 ]; then
   print_error "Este script precisa ser executado com privilégios de root."
@@ -74,7 +63,7 @@ touch "$STATE_FILE"
 # --- Definição das Versões (Automático ou Manual) ---
 print_info "Definindo as versões dos componentes..."
 
-# Comente/descomente para usar versões fixas ou buscar as mais recentes
+# --- Bloco de Versões Gerado em: qui 25 set 2025 16:35:38 -03 ---
 export GVM_LIBS="22.28.1"
 export GVMD="26.3.0"
 export PG_GVM="22.6.11"
@@ -84,18 +73,7 @@ export OPENVAS_SMB="22.5.10"
 export OPENVAS_SCANNER="23.28.0"
 export OSPD_OPENVAS="22.9.0"
 export NOTUS_SCANNER="22.7.2"
-
-# --- Bloco para obter versões dinamicamente (descomente para usar) ---
-# print_info "Obtendo as versões mais recentes dos componentes GVM do GitHub..."
-# export GVM_LIBS=$(get_latest_version "greenbone/gvm-libs")
-# export GVMD=$(get_latest_version "greenbone/gvmd")
-# export PG_GVM=$(get_latest_version "greenbone/pg-gvm")
-# export GSA=$(get_latest_version "greenbone/gsa")
-# export GSAD=$(get_latest_version "greenbone/gsad")
-# export OPENVAS_SMB=$(get_latest_version "greenbone/openvas-smb")
-# export OPENVAS_SCANNER=$(get_latest_version "greenbone/openvas-scanner")
-# export OSPD_OPENVAS=$(get_latest_version "greenbone/ospd-openvas")
-# export NOTUS_SCANNER=$(get_latest_version "greenbone/notus-scanner")
+# --- Fim do Bloco de Versões ---
 
 # --- Verificação das Variáveis ---
 declare -A components
