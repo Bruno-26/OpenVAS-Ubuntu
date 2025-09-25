@@ -81,7 +81,8 @@ for name in "${!components[@]}"; do
     if [ -z "${components[$name]}" ]; then
         echo -e "\n${RED}ERRO: Não foi possível obter a versão para o componente: ${name}.${NC}"
         echo "Verifique sua conexão com a internet ou se o repositório no GitHub está acessível."
-        echo "Você pode definir a versão manualmente no início do script."
+        echo "api.github pode ter atingido o limite de requisições"
+        echo "Você pode definir as versões manualmente no início do script."
         exit 1
     fi
 done
@@ -157,9 +158,9 @@ echo "Instalando gvm-tools..."
 sudo ./15-install_gvm-tools.sh || exit 1
 
 echo "Configurando Redis..."
-sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./16-configure_redis.sh || exit 1
+sudo OPENVAS_SCANNER="$OPENVAS_SCANNER" ./16-configure_redis.sh || exit 1
 
-echo "Configurando Redis..."
+echo "Otimizando Redis..."
 sudo ./17-optimize_redis_system.sh || exit 1
 
 echo "Configurando Mosquitto MQTT Broker..."
@@ -179,4 +180,16 @@ sudo ./22-setup_feed_validation.sh || exit 1
 
 echo "Configurando serviços..."
 sudo ./23-setup_services.sh || exit 1
+
+echo "Configurando GVM Scanner..."
+sudo ./24-setup_gvm_scanner.sh || exit 1
+
+echo "Gerenciamento de usuário..."
+sudo ./25-manage_gvm_users.sh || exit 1
+
+echo "Copnfigurando feed..."
+sudo ./26-set_feed_owner.sh || exit 1
+
+echo "Verificando e concluindo..."
+sudo ./27-check_gvm_access.sh || exit 1
 
