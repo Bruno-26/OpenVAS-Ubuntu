@@ -1,96 +1,75 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para instalar a ferramenta greenbone-feed-sync
+# Script: 14-install_feed-sync.sh
 #
-# Este script baixa e instala o pacote Python a partir do PyPI
-# em um diretório temporário e depois o copia para os locais
-# corretos do sistema.
+# Propósito:
+# 1. Instala a ferramenta greenbone-feed-sync via PyPI.
+# 2. Configura os scripts de sincronização de feeds no sistema.
+# 3. Garante que as ferramentas de atualização estejam prontas.
 # ==================================================================
 
-# --- 0. Verificações Iniciais ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
-# --- 1. Definição de Variáveis ---
+# --- Variáveis de Ambiente ---
 GVM_USER="gvm"
 GVM_HOME="/opt/gvm"
-# Define um diretório específico para este build
 BUILD_DIR="$GVM_HOME/gvm-source/greenbone-feed-sync-build"
 
-# Detecta a versão do Python e o nome do diretório de pacotes (dist-packages ou site-packages)
-PYTHON_VERSION_DIR=$(python3 -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')
-PYTHON_PACKAGES_DIR_NAME=$(python3 -c "import sysconfig; print(sysconfig.get_path('platlib').split('/')[-1])")
+# Detecta caminhos do Python
+PYTHON_VER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')
+PYTHON_PKGS=$(python3 -c "import sysconfig; print(sysconfig.get_path('platlib').split('/')[-1])")
 
-if [ -z "$PYTHON_VERSION_DIR" ] || [ -z "$PYTHON_PACKAGES_DIR_NAME" ]; then
-    echo "ERRO: Não foi possível determinar os caminhos de diretório do Python 3."
-    exit 1
-fi
-echo "Versão do Python detectada: $PYTHON_VERSION_DIR"
-echo "Diretório de pacotes detectado: $PYTHON_PACKAGES_DIR_NAME"
-
-if ! id -u "$GVM_USER" &>/dev/null; then
-    echo "ERRO: O usuário '$GVM_USER' não foi encontrado."
-    exit 1
+if ! id "$GVM_USER" &>/dev/null; then
+  print_error "O usuário '$GVM_USER' não foi encontrado."
+  exit 1
 fi
 
-# --- 2. Preparação do Ambiente ---
-echo "--- Preparando o ambiente de instalação ---"
-# Limpa o diretório de build antigo e o recria
+# --- 1. Preparação do Ambiente ---
+print_info "Preparando ambiente para instalação do feed-sync..."
+
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 chown -R "$GVM_USER:$GVM_USER" "$GVM_HOME"
-echo "Diretório de build '$BUILD_DIR' está pronto."
-echo ""
+print_success "Diretório de build '$BUILD_DIR' preparado."
 
-# --- 3. Instalação via Pip (como usuário GVM) ---
-echo "--- Baixando e instalando o pacote com pip como usuário '$GVM_USER' ---"
+# --- 2. Instalação via Pip ---
+print_info "Baixando e instalando greenbone-feed-sync com pip..."
 
 sudo -Hiu "$GVM_USER" BUILD_DIR="$BUILD_DIR" bash << 'EOF'
-    set -e # Para o script se qualquer comando falhar
-
-    cd "$BUILD_DIR"
-
-    echo "1. Instalando 'greenbone-feed-sync' no diretório de build local..."
-    # A flag --root=. faz o pip instalar os arquivos dentro de ./ como se fosse o diretório raiz
-    python3 -m pip install --root=. greenbone-feed-sync
+  set -e
+  cd "$BUILD_DIR"
+  echo -e "\033[0;34mℹ   Instalando pacote no diretório local...\033[0m"
+  python3 -m pip install --root=. greenbone-feed-sync > /dev/null
 EOF
 
-# Captura o status de saída do bloco de build
-BUILD_STATUS=$?
+# --- 3. Instalação no Sistema ---
+print_info "Copiando arquivos para o sistema..."
 
-# --- 4. Instalação dos Arquivos no Sistema (como root) ---
-if [ $BUILD_STATUS -eq 0 ]; then
-    echo ""
-    echo "--- Instalação com Pip concluída. Copiando os arquivos para o sistema ---"
+SRC_BIN="${BUILD_DIR}/usr/local/bin/"
+SRC_LIB="${BUILD_DIR}/usr/local/lib/${PYTHON_VER}/${PYTHON_PKGS}/"
+DST_LIB="/usr/local/lib/${PYTHON_VER}/${PYTHON_PKGS}/"
 
-    # Define os caminhos de origem e destino
-    SOURCE_EXEC_PATH="${BUILD_DIR}/usr/local/bin/"
-    DEST_EXEC_PATH="/usr/local/bin/"
+cp "${SRC_BIN}"* "/usr/local/bin/"
+mkdir -p "$DST_LIB"
+cp -r "${SRC_LIB}." "${DST_LIB}"
 
-    SOURCE_LIB_PATH="${BUILD_DIR}/usr/local/lib/${PYTHON_VERSION_DIR}/${PYTHON_PACKAGES_DIR_NAME}/"
-    DEST_LIB_PATH="/usr/local/lib/${PYTHON_VERSION_DIR}/${PYTHON_PACKAGES_DIR_NAME}/"
-
-    echo "1. Copiando executáveis para $DEST_EXEC_PATH..."
-    cp "${SOURCE_EXEC_PATH}"* "${DEST_EXEC_PATH}"
-
-    echo "2. Criando o diretório de bibliotecas de destino: $DEST_LIB_PATH..."
-    mkdir -p "$DEST_LIB_PATH"
-
-    echo "3. Copiando os arquivos da biblioteca Python..."
-    cp -r "${SOURCE_LIB_PATH}." "${DEST_LIB_PATH}"
-
-    echo ""
-    echo "================================================="
-    echo " greenbone-feed-sync instalado com sucesso!"
-    echo "================================================="
-else
-    echo ""
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO durante o processo de instalação.    !!!"
-    echo "!!! Verifique as mensagens de erro acima.     !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
-fi
+# --- Conclusão ---
+echo ""
+print_warning "========================================================================"
+print_success " greenbone-feed-sync instalado com sucesso!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Pacote baixado do PyPI e preparado."
+echo "   - Ferramentas de sincronização instaladas em /usr/local/bin."
+echo "   - Bibliotecas integradas ao Python do sistema."
+print_warning "========================================================================"

@@ -1,97 +1,93 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para configurar o Redis para o OpenVAS Scanner.
+# Script: 16-configure_redis.sh
 #
-# O que ele faz:
-# 1. Atualiza o cache de bibliotecas compartilhadas.
-# 2. Copia o arquivo de configuração do Redis para OpenVAS.
-# 3. Define as permissões corretas para o arquivo.
-# 4. Detecta automaticamente o caminho do socket Redis no arquivo.
-# 5. Configura o openvas.conf com o caminho do socket detectado.
-# 6. Adiciona o usuário 'gvm' ao grupo 'redis'.
-#
-# REQUISITO: A variável de ambiente OPENVAS_SCANNER deve estar definida.
-#
-# Exemplo de uso:
-#   export OPENVAS_SCANNER="23.15.3"
-#   sudo OPENVAS_SCANNER="$OPENVAS_SCANNER" ./configure_redis.sh
+# Propósito:
+# 1. Configura o Redis para atuar como base de dados temporária
+#    para o OpenVAS Scanner.
+# 2. Define as permissões de acesso ao socket Unix do Redis.
+# 3. Vincula o usuário 'gvm' ao grupo 'redis' para permitir a
+#    comunicação entre o scanner e o banco.
 # ==================================================================
 
-# --- 0. Verificações Iniciais ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
+# Valida se a variável de ambiente OPENVAS_SCANNER está definida
 if [ -z "$OPENVAS_SCANNER" ]; then
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO: A variável de ambiente OPENVAS_SCANNER não está definida.!!!"
-    echo "!!!                                                          !!!"
-    echo "!!! Execute o script da seguinte forma:                      !!!"
-    echo "!!!   sudo OPENVAS_SCANNER=\"<versao>\" $0                     !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
+  print_error "A variável de ambiente OPENVAS_SCANNER não está definida."
+  print_info "Uso correto: sudo OPENVAS_SCANNER=\"23.15.3\" $0"
+  exit 1
 fi
 
-# Define variáveis
-OPENVAS_SCANNER_VERSION="$OPENVAS_SCANNER"
-SOURCE_REDIS_CONF="/opt/gvm/gvm-source/openvas-scanner-${OPENVAS_SCANNER_VERSION}/config/redis-openvas.conf"
-DEST_REDIS_CONF="/etc/redis/redis-openvas.conf"
+# --- Variáveis de Ambiente ---
+SCANNER_VER="$OPENVAS_SCANNER"
+SRC_REDIS="/opt/gvm/gvm-source/openvas-scanner-${SCANNER_VER}/config/redis-openvas.conf"
+DST_REDIS="/etc/redis/redis-openvas.conf"
 OPENVAS_CONF="/etc/openvas/openvas.conf"
 
-# Verifica se o arquivo de configuração de origem existe
-if [ ! -f "$SOURCE_REDIS_CONF" ]; then
-    echo "ERRO: O arquivo de configuração de origem não foi encontrado em: $SOURCE_REDIS_CONF"
-    echo "Verifique se a versão ${OPENVAS_SCANNER_VERSION} foi compilada e se a variável está correta."
-    exit 1
+# Verifica se o arquivo de origem existe
+if [ ! -f "$SRC_REDIS" ]; then
+  print_error "Configuração de origem não encontrada: $SRC_REDIS"
+  exit 1
 fi
 
 # --- 1. Configuração do Sistema ---
-echo "--- Iniciando a configuração ---"
-echo "1. Atualizando o cache de bibliotecas compartilhadas (ldconfig)..."
+print_info "Atualizando cache de bibliotecas (ldconfig)..."
 ldconfig
-echo ""
+print_success "Cache atualizado."
 
 # --- 2. Configuração do Redis ---
-echo "--- Configurando o Redis ---"
-echo "1. Copiando o arquivo de configuração '$DEST_REDIS_CONF'..."
-cp "$SOURCE_REDIS_CONF" "$DEST_REDIS_CONF"
+print_info "Configurando o arquivo Redis para OpenVAS..."
 
-echo "2. Definindo a propriedade do arquivo para redis:redis..."
-chown redis:redis "$DEST_REDIS_CONF"
-echo ""
+cp "$SRC_REDIS" "$DST_REDIS"
+chown redis:redis "$DST_REDIS"
+chmod 644 "$DST_REDIS"
+print_success "Arquivo $DST_REDIS configurado."
 
 # --- 3. Configuração do OpenVAS ---
-echo "--- Configurando o OpenVAS para usar o Redis ---"
-echo "1. Detectando o caminho do socket no arquivo de configuração do Redis..."
+print_info "Vinculando o OpenVAS ao socket do Redis..."
 
-# Extrai a linha que começa com "unixsocket " e pega a segunda coluna (o caminho)
-REDIS_SOCKET_PATH=$(grep '^unixsocket ' "$DEST_REDIS_CONF" | awk '{print $2}')
+# Detecta o caminho do socket no arquivo redis-openvas.conf
+SOCKET_PATH=$(grep '^unixsocket ' "$DST_REDIS" | awk '{print $2}')
 
-# Verifica se a extração foi bem-sucedida
-if [ -z "$REDIS_SOCKET_PATH" ]; then
-    echo "ERRO: Não foi possível encontrar o caminho do 'unixsocket' em $DEST_REDIS_CONF."
-    exit 1
+if [ -z "$SOCKET_PATH" ]; then
+  print_error "Não foi possível encontrar o 'unixsocket' em $DST_REDIS."
+  exit 1
 fi
 
-echo "   - Socket encontrado: $REDIS_SOCKET_PATH"
+print_info "Socket detectado: $SOCKET_PATH"
 
-# Garante que o diretório de configuração do OpenVAS exista
 mkdir -p /etc/openvas
-
-echo "2. Escrevendo o caminho do socket no arquivo '$OPENVAS_CONF'..."
-echo "db_address = $REDIS_SOCKET_PATH" | tee "$OPENVAS_CONF"
-echo ""
+echo "db_address = $SOCKET_PATH" > "$OPENVAS_CONF"
+print_success "Arquivo $OPENVAS_CONF atualizado."
 
 # --- 4. Gerenciamento de Usuários ---
-echo "--- Ajustando permissões de usuário ---"
-echo "1. Adicionando o usuário 'gvm' ao grupo 'redis'..."
-usermod -aG redis gvm
-echo ""
+print_info "Ajustando grupos de sistema..."
+
+if id "gvm" &>/dev/null; then
+  usermod -aG redis gvm
+  print_success "Usuário 'gvm' adicionado ao grupo 'redis'."
+else
+  print_warning "Usuário 'gvm' não encontrado. Pulei o ajuste de grupo."
+fi
 
 # --- Conclusão ---
-echo "================================================="
-echo " Configuração do Redis para OpenVAS concluída!"
-echo " O usuário 'gvm' agora pode acessar o socket do Redis."
-echo "================================================="
+echo ""
+print_warning "========================================================================"
+print_success " Configuração do Redis concluída!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Arquivo redis-openvas.conf instalado."
+echo "   - Socket Unix configurado em $OPENVAS_CONF."
+echo "   - Permissões de grupo aplicadas ao usuário 'gvm'."
+print_warning "========================================================================"

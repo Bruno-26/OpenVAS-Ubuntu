@@ -1,87 +1,73 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para criar e/ou verificar um scanner OpenVAS personalizado no GVM.
+# Script: 24-setup_gvm_scanner.sh
 #
-# O que ele faz:
-# 1. Verifica se um scanner com o nome definido já existe.
-# 2. Se não existir, ele o cria.
-# 3. Extrai automaticamente o UUID do scanner (existente ou recém-criado).
-# 4. Usa o UUID para executar o comando de verificação do scanner.
+# Propósito:
+# 1. Registra o scanner OpenVAS personalizado no gvmd.
+# 2. Vincula o scanner ao socket Unix do OSPD-OpenVAS.
+# 3. Realiza a verificação de conectividade entre o manager e o scanner.
+# 4. Garante que o motor de busca esteja pronto para varreduras.
 # ==================================================================
 
-# --- 0. Verificação de Privilégios ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
-# --- 1. Definições e Pré-requisitos ---
-# <<<<---- CONFIGURE O NOME DO SEU SCANNER AQUI ---->>>>
-SCANNER_NAME="Scanner OpenVAS Principal"
-# <<<<------------------------------------------->>>>
+# --- 1. Definições ---
+SCAN_NAME="Scanner OpenVAS Principal"
+SCAN_TYPE="OpenVAS"
+SCAN_SOCKET="/run/ospd/ospd-openvas.sock"
+GVMD_BIN="/usr/local/sbin/gvmd"
 
-SCANNER_TYPE="OpenVAS"
-SCANNER_SOCKET="/run/ospd/ospd-openvas.sock"
-GVMD_CMD="/usr/local/sbin/gvmd"
+print_info "Verificando ambiente do gvmd..."
 
-echo "--- Verificando pré-requisitos ---"
-if ! [ -x "$GVMD_CMD" ]; then
-    echo "ERRO: O executável '$GVMD_CMD' não foi encontrado. A instalação do gvmd pode ter falhado."
-    exit 1
+if [ ! -x "$GVMD_BIN" ]; then
+  print_error "Executável gvmd não encontrado em $GVMD_BIN."
+  exit 1
 fi
-echo "Executável '$GVMD_CMD' encontrado."
-echo ""
 
-# --- 2. Obtenção ou Criação do Scanner ---
-echo "--- Gerenciando o scanner: '$SCANNER_NAME' ---"
-SCANNER_UUID=""
+# --- 2. Gestão do Scanner ---
+print_info "Gerenciando scanner: '$SCAN_NAME'..."
 
-# Verifica se o scanner já existe
-echo "1. Verificando se o scanner já existe..."
-# `grep -w` para corresponder à palavra inteira e evitar correspondências parciais
-EXISTING_SCANNER_LINE=$(sudo -Hiu gvm "$GVMD_CMD" --get-scanners | grep -w "$SCANNER_NAME")
+# Tenta encontrar scanner existente
+SCAN_LINE=$(sudo -Hiu gvm "$GVMD_BIN" --get-scanners | grep -w "$SCAN_NAME" || true)
 
-if [ -n "$EXISTING_SCANNER_LINE" ]; then
-    # Se o scanner existe, extrai seu UUID
-    SCANNER_UUID=$(echo "$EXISTING_SCANNER_LINE" | awk '{print $1}')
-    echo "   - Scanner encontrado com UUID: $SCANNER_UUID"
+if [ -n "$SCAN_LINE" ]; then
+  SCAN_UUID=$(echo "$SCAN_LINE" | awk '{print $1}')
+  print_info "Scanner já existe (UUID: $SCAN_UUID)."
 else
-    # Se o scanner não existe, cria um novo
-    echo "   - Scanner não encontrado. Criando um novo..."
-    if sudo -Hiu gvm "$GVMD_CMD" --create-scanner="$SCANNER_NAME" --scanner-type="$SCANNER_TYPE" --scanner-host="$SCANNER_SOCKET"; then
-        echo "   - Scanner criado com sucesso."
-        # Agora, encontra o UUID do scanner que acabamos de criar
-        SCANNER_UUID=$(sudo -Hiu gvm "$GVMD_CMD" --get-scanners | grep -w "$SCANNER_NAME" | awk '{print $1}')
-        if [ -z "$SCANNER_UUID" ]; then
-            echo "ERRO: O scanner foi criado, mas não foi possível encontrar seu UUID."
-            exit 1
-        fi
-        echo "   - UUID do novo scanner extraído: $SCANNER_UUID"
-    else
-        echo "ERRO: Falha ao criar o scanner '$SCANNER_NAME'."
-        exit 1
-    fi
+  print_info "Criando novo scanner '$SCAN_NAME'..."
+  sudo -Hiu gvm "$GVMD_BIN" --create-scanner="$SCAN_NAME" --scanner-type="$SCAN_TYPE" --scanner-host="$SCAN_SOCKET"
+  print_success "Scanner criado."
+  
+  SCAN_UUID=$(sudo -Hiu gvm "$GVMD_BIN" --get-scanners | grep -w "$SCAN_NAME" | awk '{print $1}')
 fi
-echo ""
 
-# --- 3. Verificação do Scanner ---
-if [ -n "$SCANNER_UUID" ]; then
-    echo "--- Verificando o scanner ---"
-    echo "1. Executando a verificação para o scanner com UUID: $SCANNER_UUID..."
-    if sudo -Hiu gvm "$GVMD_CMD" --verify-scanner="$SCANNER_UUID"; then
-        echo "   - A verificação do scanner foi iniciada com sucesso."
-    else
-        echo "   - ERRO: Falha ao iniciar a verificação do scanner."
-        exit 1
-    fi
+# --- 3. Verificação ---
+print_info "Iniciando verificação do scanner (UUID: $SCAN_UUID)..."
+
+if sudo -Hiu gvm "$GVMD_BIN" --verify-scanner="$SCAN_UUID"; then
+  print_success "Conectividade com o scanner validada."
 else
-    echo "ERRO FATAL: Não foi possível obter um UUID para o scanner. Abortando."
-    exit 1
+  print_error "Falha ao verificar o scanner. Verifique os logs do ospd-openvas."
+  exit 1
 fi
-echo ""
 
 # --- Conclusão ---
-echo "================================================="
-echo " Gerenciamento do scanner concluído!"
-echo "================================================="
+echo ""
+print_warning "========================================================================"
+print_success " Configuração do scanner concluída!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Scanner '$SCAN_NAME' registrado no sistema."
+echo "   - Link estabelecido via socket $SCAN_SOCKET."
+echo "   - Status de prontidão verificado com sucesso."
+print_warning "========================================================================"

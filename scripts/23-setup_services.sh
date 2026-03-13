@@ -1,81 +1,69 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para criar, configurar e iniciar todos os serviços GVM.
+# Script: 23-setup_services.sh
 #
-# O que ele faz:
-# 1. Detecta o caminho correto das bibliotecas Python.
-# 2. Cria/Atualiza os arquivos de serviço para ospd-openvas,
-#    notus-scanner, gvmd, e gsad.
-# 3. Gera os certificados TLS para gvmd/gsad (apenas se necessário).
-# 4. Configura as permissões de sudo para gsad.
-# 5. Recarrega, habilita e inicia todos os serviços na ordem correta,
-#    verificando o status de cada um.
+# Propósito:
+# 1. Cria e configura os arquivos de serviço systemd para os
+#    quatro componentes principais do GVM.
+# 2. Gera certificados TLS para comunicação interna segura.
+# 3. Inicia e habilita os daemons na ordem correta de dependência.
+# 4. Valida se todos os serviços estão operacionais.
 # ==================================================================
 
-# --- 0. Verificação de Privilégios ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
-# --- 1. Detecção do Ambiente e Pré-requisitos ---
-echo "--- Detectando o ambiente e verificando pré-requisitos ---"
-PYTHON_VERSION_DIR=$(python3 -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')
-if [ -z "$PYTHON_VERSION_DIR" ]; then
-    echo "ERRO: Não foi possível determinar a versão do Python 3."
-    exit 1
-fi
+# --- 1. Detecção do Ambiente ---
+print_info "Detectando ambiente de serviços..."
 
-# Força o uso de 'site-packages', que é o padrão para instalações manuais em /usr/local
-PYTHON_LIB_PATH="/usr/local/lib/${PYTHON_VERSION_DIR}/site-packages/"
-echo "Caminho da biblioteca Python definido como: $PYTHON_LIB_PATH"
+PYTHON_VER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')
+PYTHON_LIB="/usr/local/lib/${PYTHON_VER}/site-packages/"
+GSAD_BIN=$(which gsad || echo "/usr/local/sbin/gsad")
 
-GSAD_PATH=$(which gsad)
-if [ -z "$GSAD_PATH" ]; then
-    echo "ERRO: O executável 'gsad' não foi encontrado no PATH. A instalação pode ter falhado."
-    exit 1
-fi
-echo "Executável 'gsad' encontrado em: $GSAD_PATH"
-echo ""
+print_info "Python Lib: $PYTHON_LIB"
+print_info "GSAD Bin: $GSAD_BIN"
 
-# --- 2. Geração de Certificados (apenas se necessário) ---
-echo "--- Gerenciando os certificados TLS ---"
+# --- 2. Certificados TLS ---
+print_info "Gerenciando certificados TLS..."
+
 if [ -f /var/lib/gvm/CA/clientcert.pem ]; then
-    echo "Certificados já encontrados. Pulando a geração."
+  print_info "Certificados existentes encontrados. Pulando geração."
 else
-    echo "Certificados não encontrados. Gerando novos certificados..."
-    sudo -Hiu gvm gvm-manage-certs -a
+  print_info "Gerando novos certificados (gvm-manage-certs)..."
+  sudo -Hiu gvm gvm-manage-certs -a > /dev/null
+  print_success "Certificados gerados com sucesso."
 fi
-echo ""
 
-# --- 3. Configuração de Permissões Sudo para GSAD ---
-echo "--- Configurando permissões de sudo para o serviço 'gsad' ---"
+# --- 3. Sudo para GSAD ---
+print_info "Configurando sudo para o daemon web..."
+
 SUDOERS_FILE="/etc/sudoers.d/gvm"
-SUDO_RULE="gvm ALL = NOPASSWD: $GSAD_PATH"
+RULE="gvm ALL = NOPASSWD: $GSAD_BIN"
 
-if ! grep -qF "$SUDO_RULE" "$SUDOERS_FILE"; then
-    echo "1. Adicionando a regra de sudo para gsad..."
-    echo "$SUDO_RULE" >> "$SUDOERS_FILE"
-    visudo -c -f "$SUDOERS_FILE"
-    if [ $? -ne 0 ]; then
-        echo "ERRO CRÍTICO: A sintaxe do arquivo sudoers está incorreta!"
-        exit 1
-    fi
-else
-    echo "1. A regra de sudo para 'gsad' já existe."
+if ! grep -qF "$RULE" "$SUDOERS_FILE"; then
+  echo "$RULE" >> "$SUDOERS_FILE"
+  print_success "Regra de sudo para gsad adicionada."
 fi
-echo ""
 
-# --- 4. Criação dos Arquivos de Serviço ---
-echo "--- Criando/Atualizando os arquivos de serviço systemd ---"
+# --- 4. Arquivos de Serviço Systemd ---
+print_info "Criando unidades de serviço em /etc/systemd/system/..."
 
-# --- OSPD-OpenVAS ---
-tee /etc/systemd/system/ospd-openvas.service > /dev/null << EOL
+# OSPD-OpenVAS
+cat > /etc/systemd/system/ospd-openvas.service << EOL
 [Unit]
 Description=OSPd Wrapper for the OpenVAS Scanner (ospd-openvas)
 After=network.target networking.service redis-server@openvas.service mosquitto.service
 Wants=redis-server@openvas.service mosquitto.service
+
 [Service]
 Type=exec
 User=gvm
@@ -83,51 +71,48 @@ Group=gvm
 RuntimeDirectory=ospd
 RuntimeDirectoryMode=2775
 PIDFile=/run/ospd/ospd-openvas.pid
-Environment="PYTHONPATH=${PYTHON_LIB_PATH}"
+Environment="PYTHONPATH=${PYTHON_LIB}"
 ExecStartPre=-rm -rf /run/ospd/ospd-openvas.pid /run/ospd/ospd-openvas.sock
 ExecStart=/usr/local/bin/ospd-openvas --foreground --unix-socket /run/ospd/ospd-openvas.sock --pid-file /run/ospd/ospd-openvas.pid --log-file /var/log/gvm/ospd-openvas.log --lock-file-dir /var/lib/openvas --socket-mode 0770 --mqtt-broker-address localhost --mqtt-broker-port 1883 --notus-feed-dir /var/lib/notus/advisories
 SuccessExitStatus=SIGKILL
 Restart=always
 RestartSec=60
+
 [Install]
 WantedBy=multi-user.target
 EOL
-echo "Arquivo de serviço 'ospd-openvas.service' criado."
 
-# --- Notus Scanner ---
-tee /etc/systemd/system/notus-scanner.service > /dev/null << EOL
+# Notus Scanner
+cat > /etc/systemd/system/notus-scanner.service << EOL
 [Unit]
 Description=Notus Scanner
 After=mosquitto.service
 Wants=mosquitto.service
+
 [Service]
 Type=exec
 User=gvm
 RuntimeDirectory=notus-scanner
 RuntimeDirectoryMode=2775
 PIDFile=/run/notus-scanner/notus-scanner.pid
-Environment="PYTHONPATH=${PYTHON_LIB_PATH}"
+Environment="PYTHONPATH=${PYTHON_LIB}"
 ExecStart=/usr/local/bin/notus-scanner --foreground --products-directory /var/lib/notus/products --log-file /var/log/gvm/notus-scanner.log
 SuccessExitStatus=SIGKILL
 Restart=always
 RestartSec=60
+
 [Install]
 WantedBy=multi-user.target
 EOL
-echo "Arquivo de serviço 'notus-scanner.service' criado."
 
-# --- GVMD ---
-GVMD_SERVICE_FILE="/usr/local/lib/systemd/system/gvmd.service"
-if [ -f "$GVMD_SERVICE_FILE" ] && [ ! -f "${GVMD_SERVICE_FILE}.bak" ]; then
-    cp "$GVMD_SERVICE_FILE" "${GVMD_SERVICE_FILE}.bak"
-    echo "Backup de '$GVMD_SERVICE_FILE' criado."
-fi
-tee "$GVMD_SERVICE_FILE" > /dev/null << EOL
+# GVMD
+cat > /usr/local/lib/systemd/system/gvmd.service << EOL
 [Unit]
 Description=Greenbone Vulnerability Manager daemon (gvmd)
 After=network.target networking.service postgresql.service ospd-openvas.service
 Wants=postgresql.service ospd-openvas.service
 Documentation=man:gvmd(8)
+
 [Service]
 Type=exec
 User=gvm
@@ -138,23 +123,19 @@ RuntimeDirectoryMode=2775
 ExecStart=/usr/local/sbin/gvmd --foreground --osp-vt-update=/run/ospd/ospd-openvas.sock --listen-group=gvm
 Restart=always
 TimeoutStopSec=10
+
 [Install]
 WantedBy=multi-user.target
 EOL
-echo "Arquivo de serviço 'gvmd.service' atualizado."
 
-# --- GSAD ---
-GSAD_SERVICE_FILE="/usr/local/lib/systemd/system/gsad.service"
-if [ -f "$GSAD_SERVICE_FILE" ] && [ ! -f "${GSAD_SERVICE_FILE}.bak" ]; then
-    cp "$GSAD_SERVICE_FILE" "${GSAD_SERVICE_FILE}.bak"
-    echo "Backup de '$GSAD_SERVICE_FILE' criado."
-fi
-tee "$GSAD_SERVICE_FILE" > /dev/null << EOL
+# GSAD
+cat > /usr/local/lib/systemd/system/gsad.service << EOL
 [Unit]
 Description=Greenbone Security Assistant daemon (gsad)
 Documentation=man:gsad(8) https://www.greenbone.net
 After=network.target gvmd.service
 Wants=gvmd.service
+
 [Service]
 Type=exec
 User=gvm
@@ -162,51 +143,46 @@ Group=gvm
 RuntimeDirectory=gsad
 RuntimeDirectoryMode=2775
 PIDFile=/run/gsad/gsad.pid
-ExecStart=/usr/bin/sudo /usr/local/sbin/gsad --foreground -k /var/lib/gvm/private/CA/clientkey.pem -c /var/lib/gvm/CA/clientcert.pem
+ExecStart=/usr/bin/sudo $GSAD_BIN --foreground -k /var/lib/gvm/private/CA/clientkey.pem -c /var/lib/gvm/CA/clientcert.pem
 Restart=always
 TimeoutStopSec=10
+
 [Install]
 WantedBy=multi-user.target
 Alias=greenbone-security-assistant.service
 EOL
-echo "Arquivo de serviço 'gsad.service' atualizado."
-echo ""
 
-# --- 5. Gerenciamento dos Serviços ---
-echo "--- Habilitando e iniciando todos os serviços na ordem correta ---"
-echo "1. Recarregando as configurações do systemd..."
+print_success "Arquivos systemd preparados."
+
+# --- 5. Ativação dos Serviços ---
+print_info "Iniciando daemons do GVM..."
+
 systemctl daemon-reload
 
-start_and_check_service() {
-    local service_name="$1"
-    echo ""
-    echo "Habilitando e iniciando o serviço '$service_name'..."
-    systemctl enable --now "$service_name"
-    echo "Aguardando 2 segundos para o serviço estabilizar..."
-    sleep 2
-    if systemctl is-active --quiet "$service_name"; then
-        echo "   - SUCESSO: O serviço '$service_name' está ativo e em execução."
-    else
-        echo "   - ERRO: O serviço '$service_name' falhou ao iniciar."
-        echo "     Verifique o status com: systemctl status $service_name"
-    fi
+start_svc() {
+  local svc="$1"
+  print_info "Iniciando $svc..."
+  systemctl enable --now "$svc" > /dev/null
+  sleep 2
+  if systemctl is-active --quiet "$svc"; then
+    print_success "Serviço '$svc' operacional."
+  else
+    print_error "Falha crítica no serviço '$svc'."
+  fi
 }
 
-# Inicia os serviços na ordem de dependência
-start_and_check_service "ospd-openvas"
-start_and_check_service "notus-scanner"
-start_and_check_service "gvmd"
-start_and_check_service "gsad"
-echo ""
+start_svc "ospd-openvas"
+start_svc "notus-scanner"
+start_svc "gvmd"
+start_svc "gsad"
 
 # --- Conclusão ---
-echo "======================================================================"
-echo " Configuração de todos os serviços GVM concluída!"
-echo " O sistema deve estar operacional. Acesse a interface web para verificar."
 echo ""
-echo " Comandos úteis para verificar os logs:"
-echo "   sudo tail -f /var/log/gvm/ospd-openvas.log"
-echo "   sudo tail -f /var/log/gvm/notus-scanner.log"
-echo "   sudo tail -f /var/log/gvm/gvmd.log"
-echo "   sudo tail -f /var/log/gvm/gsad.log"
-echo "======================================================================"
+print_warning "========================================================================"
+print_success " Configuração de serviços GVM finalizada!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Certificados TLS garantidos."
+echo "   - Quatro serviços systemd configurados e iniciados."
+echo "   - O GVM agora está pronto para acesso via navegador."
+print_warning "========================================================================"

@@ -1,94 +1,90 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para compilar e instalar o Greenbone Security Assistant Server (gsad)
+# Script: 10-build_gsad.sh
 #
-# REQUISITO: A variável de ambiente GSAD deve estar definida.
-#
-# Exemplo de uso:
-#   export GSAD="24.2.0"
-#   sudo GSAD="$GSAD" ./build_gsad.sh
+# Propósito:
+# 1. Baixa o código-fonte do gsad (Greenbone Security Assistant Daemon).
+# 2. Configura a compilação com CMake.
+# 3. Compila e instala o servidor que serve a interface web do GVM.
 # ==================================================================
 
-# --- 0. Verificações Iniciais ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
+# Valida se a variável de ambiente GSAD está definida
 if [ -z "$GSAD" ]; then
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO: A variável de ambiente GSAD não está definida.    !!!"
-    echo "!!!                                                          !!!"
-    echo "!!! Execute o script da seguinte forma:                      !!!"
-    echo "!!!   sudo GSAD=\"<versao>\" $0                                !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
+  print_error "A variável de ambiente GSAD não está definida."
+  print_info "Uso correto: sudo GSAD=\"24.2.0\" $0"
+  exit 1
 fi
 
-# Define variáveis
+# --- Variáveis de Ambiente ---
 GSAD_VERSION="$GSAD"
 GVM_USER="gvm"
 GVM_HOME="/opt/gvm"
 SOURCE_DIR="$GVM_HOME/gvm-source"
 
-if ! id -u "$GVM_USER" &>/dev/null; then
-    echo "ERRO: O usuário '$GVM_USER' não foi encontrado."
-    exit 1
+if ! id "$GVM_USER" &>/dev/null; then
+  print_error "O usuário '$GVM_USER' não foi encontrado."
+  exit 1
 fi
 
 # --- 1. Preparação do Ambiente ---
-echo "--- Preparando o ambiente de compilação para gsad v${GSAD_VERSION} ---"
+print_info "Preparando ambiente para compilação do gsad v${GSAD_VERSION}..."
+
 mkdir -p "$SOURCE_DIR"
 chown -R "$GVM_USER:$GVM_USER" "$GVM_HOME"
-echo "Diretório de fontes '$SOURCE_DIR' está pronto."
-echo ""
+print_success "Diretório de fontes '$SOURCE_DIR' preparado."
 
-# --- 2. Execução como usuário GVM ---
-echo "--- Executando o processo de compilação como usuário '$GVM_USER' ---"
+# --- 2. Compilação e Instalação ---
+print_info "Iniciando processo de compilação como usuário '$GVM_USER'..."
 
-# Usa "Here Document" para executar um bloco de comandos como outro usuário
-# e exibir o output em tempo real.
+# Executa o bloco de comandos como usuário gvm
 sudo -Hiu "$GVM_USER" GSAD_VERSION="$GSAD_VERSION" bash << 'EOF'
-    set -e # Para o script se qualquer comando falhar
+  set -e
+  
+  SOURCE_DIR="$HOME/gvm-source"
+  TARBALL_NAME="gsad-v${GSAD_VERSION}.tar.gz"
+  SOURCE_FOLDER="gsad-${GSAD_VERSION}"
 
-    # Define variáveis internas
-    SOURCE_DIR="$HOME/gvm-source"
-    TARBALL_NAME="gsad-v${GSAD_VERSION}.tar.gz"
-    SOURCE_FOLDER="gsad-${GSAD_VERSION}"
+  cd "$SOURCE_DIR"
 
-    cd "$SOURCE_DIR"
+  echo -e "\033[0;34mℹ   1. Baixando gsad v${GSAD_VERSION}...\033[0m"
+  wget -q "https://github.com/greenbone/gsad/archive/refs/tags/v${GSAD_VERSION}.tar.gz" -O "$TARBALL_NAME"
 
-    echo "1. Baixando gsad versão ${GSAD_VERSION}..."
-    wget "https://github.com/greenbone/gsad/archive/refs/tags/v${GSAD_VERSION}.tar.gz" -O "$TARBALL_NAME"
+  echo -e "\033[0;34mℹ   2. Extraindo arquivos...\033[0m"
+  rm -rf "$SOURCE_FOLDER"
+  tar xzf "$TARBALL_NAME"
+  cd "$SOURCE_FOLDER"
 
-    echo "2. Extraindo o arquivo..."
-    rm -rf "$SOURCE_FOLDER"
-    tar xzf "$TARBALL_NAME"
-    cd "$SOURCE_FOLDER"
+  echo -e "\033[0;34mℹ   3. Configurando com CMake...\033[0m"
+  mkdir -p build && cd build
+  cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local > /dev/null
 
-    echo "3. Criando o diretório de build e configurando com CMake..."
-    mkdir -p build && cd build
-    cmake ..
+  echo -e "\033[0;34mℹ   4. Compilando servidor gsad...\033[0m"
+  make -j$(nproc) > /dev/null
 
-    echo "4. Compilando com 'make' (usando todos os núcleos de CPU)..."
-    make -j$(nproc)
-
-    echo "5. Instalando com 'sudo make install'..."
-    sudo make install
+  echo -e "\033[0;34mℹ   5. Instalando binários...\033[0m"
+  sudo make install > /dev/null
 EOF
 
-# Verifica o status de saída do bloco de compilação
-if [ $? -eq 0 ]; then
-    echo ""
-    echo "================================================="
-    echo " gsad versão ${GSAD_VERSION} instalado com sucesso!"
-    echo "================================================="
-else
-    echo ""
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO durante o processo de compilação.    !!!"
-    echo "!!! Verifique as mensagens de erro acima.     !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
-fi
+# --- Conclusão ---
+echo ""
+print_warning "========================================================================"
+print_success " Servidor gsad v${GSAD_VERSION} instalado com sucesso!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Download e extração do código-fonte do servidor web."
+echo "   - Configuração do CMake concluída."
+echo "   - Compilação realizada com sucesso."
+echo "   - Binário gsad instalado em /usr/local/sbin."
+print_warning "========================================================================"

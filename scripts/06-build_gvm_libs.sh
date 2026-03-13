@@ -1,100 +1,91 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para compilar e instalar gvm-libs (VERSÃO VERBOSA)
+# Script: 06-build_gvm_libs.sh
 #
-# REQUISITO: A variável de ambiente GVM_LIBS deve estar definida
-#            antes de executar este script.
-#
-# Exemplo de uso:
-#   export GVM_LIBS="22.7.0"
-#   sudo GVM_LIBS="$GVM_LIBS" ./build_gvm_libs.sh
+# Propósito:
+# 1. Baixa o código-fonte do gvm-libs na versão especificada.
+# 2. Configura o ambiente de compilação com CMake.
+# 3. Compila e instala as bibliotecas GVM no sistema.
 # ==================================================================
 
-# --- 0. Verificações Iniciais ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
+# Valida se a variável de ambiente GVM_LIBS está definida
 if [ -z "$GVM_LIBS" ]; then
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO: A variável de ambiente GVM_LIBS não está definida. !!!"
-    echo "!!!                                                          !!!"
-    echo "!!! Execute-o da seguinte forma:                             !!!"
-    echo "!!!   sudo GVM_LIBS=\"<versao>\" $0                             !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
+  print_error "A variável de ambiente GVM_LIBS não está definida."
+  print_info "Uso correto: sudo GVM_LIBS=\"22.7.0\" $0"
+  exit 1
 fi
 
-# Define variáveis
+# --- Variáveis de Ambiente ---
 GVM_LIBS_VERSION="$GVM_LIBS"
 GVM_USER="gvm"
 GVM_HOME="/opt/gvm"
 SOURCE_DIR="$GVM_HOME/gvm-source"
 
-if ! id -u "$GVM_USER" &>/dev/null; then
-    echo "ERRO: O usuário '$GVM_USER' não foi encontrado."
-    exit 1
+if ! id "$GVM_USER" &>/dev/null; then
+  print_error "O usuário '$GVM_USER' não foi encontrado."
+  exit 1
 fi
 
 # --- 1. Preparação do Ambiente ---
-echo "--- Preparando o ambiente de compilação para gvm-libs v${GVM_LIBS_VERSION} ---"
+print_info "Preparando ambiente para compilação do gvm-libs v${GVM_LIBS_VERSION}..."
+
 mkdir -p "$SOURCE_DIR"
 chown -R "$GVM_USER:$GVM_USER" "$GVM_HOME"
-echo "Diretório de fontes '$SOURCE_DIR' está pronto."
-echo ""
+print_success "Diretório de fontes '$SOURCE_DIR' preparado."
 
-# --- 2. Execução como usuário GVM usando "Here Document" ---
-echo "--- Executando o processo de compilação como usuário '$GVM_USER' ---"
+# --- 2. Compilação e Instalação ---
+print_info "Iniciando processo de compilação como usuário '$GVM_USER'..."
 
-# Esta sintaxe com "<< 'EOF'" é mais robusta para exibir o output em tempo real.
-# A variável GVM_LIBS_VERSION é passada para o ambiente do novo shell.
+# Executa o bloco de comandos como usuário gvm
 sudo -Hiu "$GVM_USER" GVM_LIBS_VERSION="$GVM_LIBS_VERSION" bash << 'EOF'
-    # 'set -e' garante que o script pare se houver qualquer erro.
-    set -e
+  set -e
+  source "$(dirname "$0")/../style.sh" 2>/dev/null || true
 
-    # Define variáveis internas (herdando GVM_LIBS_VERSION)
-    SOURCE_DIR="$HOME/gvm-source"
-    TARBALL_NAME="gvm-libs-v${GVM_LIBS_VERSION}.tar.gz"
-    SOURCE_FOLDER="gvm-libs-${GVM_LIBS_VERSION}"
+  SOURCE_DIR="$HOME/gvm-source"
+  TARBALL_NAME="gvm-libs-v${GVM_LIBS_VERSION}.tar.gz"
+  SOURCE_FOLDER="gvm-libs-${GVM_LIBS_VERSION}"
 
-    cd "$SOURCE_DIR"
+  cd "$SOURCE_DIR"
 
-    echo "1. Baixando gvm-libs versão ${GVM_LIBS_VERSION}..."
-    # Removido -q para mostrar o progresso
-    wget "https://github.com/greenbone/gvm-libs/archive/refs/tags/v${GVM_LIBS_VERSION}.tar.gz" -O "$TARBALL_NAME"
+  echo -e "\033[0;34mℹ   1. Baixando gvm-libs v${GVM_LIBS_VERSION}...\033[0m"
+  wget -q "https://github.com/greenbone/gvm-libs/archive/refs/tags/v${GVM_LIBS_VERSION}.tar.gz" -O "$TARBALL_NAME"
 
-    echo "2. Extraindo o arquivo..."
-    # Limpa a pasta antiga, se existir
-    rm -rf "$SOURCE_FOLDER"
-    tar xzf "$TARBALL_NAME"
-    cd "$SOURCE_FOLDER"
+  echo -e "\033[0;34mℹ   2. Extraindo arquivos...\033[0m"
+  rm -rf "$SOURCE_FOLDER"
+  tar xzf "$TARBALL_NAME"
+  cd "$SOURCE_FOLDER"
 
-    echo "3. Criando o diretório de build e configurando com CMake..."
-    mkdir -p build && cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+  echo -e "\033[0;34mℹ   3. Configurando com CMake...\033[0m"
+  mkdir -p build && cd build
+  cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local > /dev/null
 
-    echo "4. Compilando com 'make' (usando todos os núcleos de CPU)..."
-    # Adicionado -j$(nproc) para acelerar a compilação
-    make -j$(nproc)
+  echo -e "\033[0;34mℹ   4. Compilando (usando $(nproc) núcleos)...\033[0m"
+  make -j$(nproc) > /dev/null
 
-    echo "5. Instalando com 'sudo make install'..."
-    # Este comando funciona porque configuramos o sudoers para o usuário gvm
-    sudo make install
+  echo -e "\033[0;34mℹ   5. Instalando bibliotecas...\033[0m"
+  sudo make install > /dev/null
 EOF
 
-# Verifica o status de saída do bloco de comandos acima
-if [ $? -eq 0 ]; then
-    echo ""
-    echo "================================================="
-    echo " gvm-libs versão ${GVM_LIBS_VERSION} instalado com sucesso!"
-    echo "================================================="
-else
-    echo ""
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO durante o processo de compilação.    !!!"
-    echo "!!! Verifique as mensagens de erro acima.     !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
-fi
+# --- Conclusão ---
+echo ""
+print_warning "========================================================================"
+print_success " gvm-libs v${GVM_LIBS_VERSION} instalado com sucesso!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Download e extração do código-fonte."
+echo "   - Configuração do CMake concluída."
+echo "   - Compilação realizada com sucesso."
+echo "   - Bibliotecas instaladas em /usr/local/lib."
+print_warning "========================================================================"

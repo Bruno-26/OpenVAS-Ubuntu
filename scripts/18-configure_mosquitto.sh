@@ -1,75 +1,75 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para configurar o Mosquitto MQTT Broker para GVM.
+# Script: 18-configure_mosquitto.sh
 #
-# O que ele faz:
-# 1. Configura o OpenVAS para usar o broker Mosquitto local.
-# 2. Habilita e inicia o serviço mosquitto.
-# 3. Verifica se o serviço foi iniciado corretamente e está
-#    escutando na porta 1883.
+# Propósito:
+# 1. Configura o OpenVAS para se comunicar com o Mosquitto MQTT Broker.
+# 2. Habilita o serviço Mosquitto para iniciar com o sistema.
+# 3. Valida se o broker está ativo e escutando na porta padrão (1883).
 # ==================================================================
 
-# --- 0. Verificação de Privilégios ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
 # --- 1. Configuração do OpenVAS ---
-echo "--- Configurando o OpenVAS para usar o Mosquitto MQTT Broker ---"
-OPENVAS_CONF="/etc/openvas/openvas.conf"
+print_info "Configurando integração MQTT no OpenVAS..."
 
-# Garante que o diretório de configuração do OpenVAS exista
+OPENVAS_CONF="/etc/openvas/openvas.conf"
 mkdir -p /etc/openvas
 
-# Adiciona a configuração do servidor MQTT se não existir
+# Adiciona mqtt_server_uri se ausente
 if ! grep -q "^mqtt_server_uri" "$OPENVAS_CONF"; then
-    echo "1. Adicionando 'mqtt_server_uri = localhost:1883' em $OPENVAS_CONF..."
-    echo "mqtt_server_uri = localhost:1883" >> "$OPENVAS_CONF"
-else
-    echo "1. Configuração 'mqtt_server_uri' já existe."
+  echo "mqtt_server_uri = localhost:1883" >> "$OPENVAS_CONF"
+  print_info "Configuração mqtt_server_uri adicionada."
 fi
 
-# Adiciona a configuração da abordagem de escaneamento se não existir
+# Adiciona table_driven_lsc se ausente
 if ! grep -q "^table_driven_lsc" "$OPENVAS_CONF"; then
-    echo "2. Adicionando 'table_driven_lsc = yes' em $OPENVAS_CONF..."
-    echo "table_driven_lsc = yes" >> "$OPENVAS_CONF"
-else
-    echo "2. Configuração 'table_driven_lsc' já existe."
+  echo "table_driven_lsc = yes" >> "$OPENVAS_CONF"
+  print_info "Configuração table_driven_lsc adicionada."
 fi
-echo ""
 
-# --- 2. Gerenciamento do Serviço Mosquitto ---
-echo "--- Gerenciando o serviço Mosquitto ---"
-MOSQUITTO_SERVICE="mosquitto"
+print_success "Arquivo $OPENVAS_CONF configurado."
 
-echo "1. Habilitando e iniciando o serviço '$MOSQUITTO_SERVICE'..."
-systemctl enable --now "$MOSQUITTO_SERVICE"
+# --- 2. Gerenciamento do Serviço ---
+print_info "Gerenciando o serviço Mosquitto..."
 
-# Aguarda um momento para o serviço estabilizar
+SVC="mosquitto"
+systemctl enable --now "$SVC" > /dev/null
+
+# Pequena pausa para o serviço subir
 sleep 2
 
-echo "2. Verificando o status do serviço..."
-if systemctl is-active --quiet "$MOSQUITTO_SERVICE"; then
-    echo "   - SUCESSO: O serviço '$MOSQUITTO_SERVICE' está ativo e em execução."
+if systemctl is-active --quiet "$SVC"; then
+  print_success "Serviço '$SVC' está ativo e em execução."
 else
-    echo "   - ERRO: O serviço '$MOSQUITTO_SERVICE' falhou ao iniciar."
-    echo "     Verifique o status com: systemctl status $MOSQUITTO_SERVICE"
-    exit 1
+  print_error "Falha ao iniciar '$SVC'. Verifique logs do sistema."
+  exit 1
 fi
 
-echo "3. Verificando se o serviço está escutando na porta 1883..."
-# '-l' para listening, '-n' para numérico, '-t' para tcp, '-p' para processo
+# Validação de rede
 if ss -lntp | grep -q ":1883"; then
-    echo "   - SUCESSO: O serviço está escutando na porta 1883."
-    ss -lntp | grep ":1883"
+  print_success "Mosquitto está escutando na porta 1883."
 else
-    echo "   - AVISO: O serviço está ativo, mas não foi encontrado escutando na porta 1883."
+  print_warning "Mosquitto ativo, mas não detectado na porta 1883. Verifique firewall."
 fi
-echo ""
 
 # --- Conclusão ---
-echo "================================================="
-echo " Configuração do Mosquitto concluída!"
-echo "================================================="
+echo ""
+print_warning "========================================================================"
+print_success " Configuração do Mosquitto concluída!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Integração MQTT habilitada no OpenVAS."
+echo "   - Broker Mosquitto iniciado e habilitado no boot."
+echo "   - Comunicação via porta 1883 validada."
+print_warning "========================================================================"

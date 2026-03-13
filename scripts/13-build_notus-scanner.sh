@@ -1,120 +1,100 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para compilar e instalar o Notus Scanner
+# Script: 13-build_notus-scanner.sh
 #
-# REQUISITO: A variável de ambiente NOTUS_SCANNER deve estar definida.
-#
-# Exemplo de uso:
-#   export NOTUS_SCANNER="22.6.5"
-#   sudo NOTUS_SCANNER="$NOTUS_SCANNER" ./build_notus-scanner.sh
+# Propósito:
+# 1. Baixa o código-fonte do Notus Scanner.
+# 2. Prepara o ambiente de build Python.
+# 3. Compila e instala o Notus Scanner, responsável pela detecção
+#    de vulnerabilidades locais (LSC).
 # ==================================================================
 
-# --- 0. Verificações Iniciais ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
+# Valida se a variável de ambiente NOTUS_SCANNER está definida
 if [ -z "$NOTUS_SCANNER" ]; then
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO: A variável de ambiente NOTUS_SCANNER não está definida. !!!"
-    echo "!!!                                                          !!!"
-    echo "!!! Execute o script da seguinte forma:                      !!!"
-    echo "!!!   sudo NOTUS_SCANNER=\"<versao>\" $0                       !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
+  print_error "A variável de ambiente NOTUS_SCANNER não está definida."
+  print_info "Uso correto: sudo NOTUS_SCANNER=\"22.6.5\" $0"
+  exit 1
 fi
 
-# --- 1. Definição de Variáveis ---
-NOTUS_SCANNER_VERSION="$NOTUS_SCANNER"
+# --- Variáveis de Ambiente ---
+NOTUS_VERSION="$NOTUS_SCANNER"
 GVM_USER="gvm"
 GVM_HOME="/opt/gvm"
 SOURCE_DIR="$GVM_HOME/gvm-source"
-SOURCE_FOLDER="notus-scanner-${NOTUS_SCANNER_VERSION}"
 
-# Detecta a versão do Python para criar os caminhos de diretório corretos
-PYTHON_VERSION_DIR=$(python3 -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')
-if [ -z "$PYTHON_VERSION_DIR" ]; then
-    echo "ERRO: Não foi possível determinar a versão do Python 3."
-    exit 1
-fi
-echo "Versão do Python detectada: $PYTHON_VERSION_DIR"
+# Detecta a versão do Python
+PYTHON_VER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')
+print_info "Versão do Python detectada: $PYTHON_VER"
 
-if ! id -u "$GVM_USER" &>/dev/null; then
-    echo "ERRO: O usuário '$GVM_USER' não foi encontrado."
-    exit 1
+if ! id "$GVM_USER" &>/dev/null; then
+  print_error "O usuário '$GVM_USER' não foi encontrado."
+  exit 1
 fi
 
-# --- 2. Preparação do Ambiente ---
-echo "--- Preparando o ambiente de compilação para notus-scanner v${NOTUS_SCANNER_VERSION} ---"
+# --- 1. Preparação do Ambiente ---
+print_info "Preparando ambiente para build do notus-scanner v${NOTUS_VERSION}..."
+
 mkdir -p "$SOURCE_DIR"
 chown -R "$GVM_USER:$GVM_USER" "$GVM_HOME"
-echo "Diretório de fontes '$SOURCE_DIR' está pronto."
-echo ""
+print_success "Diretório de fontes '$SOURCE_DIR' preparado."
 
-# --- 3. Build do Pacote Python (como usuário GVM) ---
-echo "--- Executando o processo de build do Python como usuário '$GVM_USER' ---"
+# --- 2. Build do Pacote ---
+print_info "Iniciando build do Python como usuário '$GVM_USER'..."
 
-sudo -Hiu "$GVM_USER" NOTUS_SCANNER_VERSION="$NOTUS_SCANNER_VERSION" bash << 'EOF'
-    set -e # Para o script se qualquer comando falhar
+sudo -Hiu "$GVM_USER" NOTUS_VERSION="$NOTUS_VERSION" bash << 'EOF'
+  set -e
+  SOURCE_DIR="$HOME/gvm-source"
+  TARBALL="notus-scanner-v${NOTUS_VERSION}.tar.gz"
+  FOLDER="notus-scanner-${NOTUS_VERSION}"
 
-    SOURCE_DIR="$HOME/gvm-source"
-    TARBALL_NAME="notus-scanner-v${NOTUS_SCANNER_VERSION}.tar.gz"
-    SOURCE_FOLDER="notus-scanner-${NOTUS_SCANNER_VERSION}"
+  cd "$SOURCE_DIR"
+  echo -e "\033[0;34mℹ   1. Baixando notus-scanner v${NOTUS_VERSION}...\033[0m"
+  wget -q "https://github.com/greenbone/notus-scanner/archive/refs/tags/v${NOTUS_VERSION}.tar.gz" -O "$TARBALL"
+  
+  echo -e "\033[0;34mℹ   2. Extraindo arquivos...\033[0m"
+  rm -rf "$FOLDER"
+  tar xzf "$TARBALL"
+  cd "$FOLDER"
 
-    cd "$SOURCE_DIR"
-
-    echo "1. Baixando notus-scanner versão ${NOTUS_SCANNER_VERSION}..."
-    wget "https://github.com/greenbone/notus-scanner/archive/refs/tags/v${NOTUS_SCANNER_VERSION}.tar.gz" -O "$TARBALL_NAME"
-
-    echo "2. Extraindo o arquivo..."
-    rm -rf "$SOURCE_FOLDER"
-    tar xzf "$TARBALL_NAME"
-    cd "$SOURCE_FOLDER"
-
-    echo "3. Criando um ambiente de build..."
-    rm -rf build
-    mkdir build
-
-    echo "4. Instalando o pacote em um diretório de build local com 'pip'..."
-    python3 -m pip install --user --root=./build .
+  echo -e "\033[0;34mℹ   3. Preparando instalação local (pip --root)...\033[0m"
+  rm -rf build && mkdir build
+  python3 -m pip install --user --root=./build . > /dev/null
 EOF
 
-# Captura o status de saída do bloco de build
-BUILD_STATUS=$?
+# --- 3. Instalação no Sistema ---
+print_info "Instalando binários e bibliotecas no sistema..."
 
-# --- 4. Instalação dos Arquivos (como root) ---
-if [ $BUILD_STATUS -eq 0 ]; then
-    echo ""
-    echo "--- Build concluído com sucesso. Instalando os arquivos no sistema ---"
+FOLDER="notus-scanner-${NOTUS_VERSION}"
+BUILD_ROOT="${SOURCE_DIR}/${FOLDER}/build"
 
-    # Define os caminhos de origem e destino
-    SOURCE_EXEC_PATH="${SOURCE_DIR}/${SOURCE_FOLDER}/build${GVM_HOME}/.local/bin/"
-    DEST_EXEC_PATH="/usr/local/bin/"
+# Caminhos de origem e destino
+SRC_BIN="${BUILD_ROOT}${GVM_HOME}/.local/bin/"
+SRC_LIB="${BUILD_ROOT}${GVM_HOME}/.local/lib/${PYTHON_VER}/site-packages/"
+DST_LIB="/usr/local/lib/${PYTHON_VER}/site-packages/"
 
-    SOURCE_LIB_PATH="${SOURCE_DIR}/${SOURCE_FOLDER}/build${GVM_HOME}/.local/lib/${PYTHON_VERSION_DIR}/site-packages/"
-    DEST_LIB_PATH="/usr/local/lib/${PYTHON_VERSION_DIR}/site-packages/"
+cp "${SRC_BIN}"* "/usr/local/bin/"
+mkdir -p "$DST_LIB"
+cp -r "${SRC_LIB}." "${DST_LIB}"
 
-    echo "1. Copiando executáveis para $DEST_EXEC_PATH..."
-    # Usa um wildcard (*) para o caso de haver mais de um executável
-    cp "${SOURCE_EXEC_PATH}"* "${DEST_EXEC_PATH}"
-
-    echo "2. Criando o diretório de bibliotecas de destino: $DEST_LIB_PATH..."
-    mkdir -p "$DEST_LIB_PATH"
-
-    echo "3. Copiando os arquivos da biblioteca Python..."
-    cp -r "${SOURCE_LIB_PATH}." "${DEST_LIB_PATH}"
-
-    echo ""
-    echo "================================================="
-    echo " notus-scanner v${NOTUS_SCANNER_VERSION} instalado com sucesso!"
-    echo "================================================="
-else
-    echo ""
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO durante o processo de build.         !!!"
-    echo "!!! Verifique as mensagens de erro acima.     !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
-fi
+# --- Conclusão ---
+echo ""
+print_warning "========================================================================"
+print_success " notus-scanner v${NOTUS_VERSION} instalado com sucesso!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Download e build do pacote Python concluído."
+echo "   - Binários instalados em /usr/local/bin."
+echo "   - Bibliotecas instaladas em $DST_LIB."
+print_warning "========================================================================"

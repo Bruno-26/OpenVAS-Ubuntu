@@ -1,114 +1,103 @@
 #!/bin/bash
 
 # ==================================================================
-# Script para compilar e instalar o Greenbone Security Assistant (gsa)
+# Script: 09-build_gsa.sh
 #
-# REQUISITO: A variável de ambiente GSA deve estar definida.
-#
-# Exemplo de uso:
-#   export GSA="24.2.0"
-#   sudo GSA="$GSA" ./build_gsa.sh
+# Propósito:
+# 1. Baixa o código-fonte do Greenbone Security Assistant (GSA).
+#    O GSA é a interface web (front-end) do GVM.
+# 2. Instala as dependências do Node.js necessárias.
+# 3. Compila o projeto (build) para gerar os arquivos estáticos.
+# 4. Instala os arquivos compilados no diretório web do sistema.
 # ==================================================================
 
-# --- 0. Verificações Iniciais ---
+# --- Configurações de Segurança e Estilo ---
+set -e
+set -o pipefail
+source "$(dirname "$0")/../style.sh"
+
+# --- Verificação de Privilégios ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Por favor, use 'sudo'."
+  print_error "Este script precisa ser executado como root. Por favor, use 'sudo'."
   exit 1
 fi
 
+# Valida se a variável de ambiente GSA está definida
 if [ -z "$GSA" ]; then
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO: A variável de ambiente GSA não está definida.     !!!"
-    echo "!!!                                                          !!!"
-    echo "!!! Execute o script da seguinte forma:                      !!!"
-    echo "!!!   sudo GSA=\"<versao>\" $0                                 !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
+  print_error "A variável de ambiente GSA não está definida."
+  print_info "Uso correto: sudo GSA=\"24.2.0\" $0"
+  exit 1
 fi
 
-# Define variáveis
+# --- Variáveis de Ambiente ---
 GSA_VERSION="$GSA"
 GVM_USER="gvm"
 GVM_HOME="/opt/gvm"
 SOURCE_DIR="$GVM_HOME/gvm-source"
-SOURCE_FOLDER="gsa-${GSA_VERSION}"
 INSTALL_DIR="/usr/local/share/gvm/gsad/web"
 
-if ! id -u "$GVM_USER" &>/dev/null; then
-    echo "ERRO: O usuário '$GVM_USER' não foi encontrado."
-    exit 1
+if ! id "$GVM_USER" &>/dev/null; then
+  print_error "O usuário '$GVM_USER' não foi encontrado."
+  exit 1
 fi
 
 # --- 1. Preparação do Ambiente ---
-echo "--- Preparando o ambiente de compilação para gsa v${GSA_VERSION} ---"
+print_info "Preparando ambiente para o build do GSA v${GSA_VERSION}..."
+
 mkdir -p "$SOURCE_DIR"
 chown -R "$GVM_USER:$GVM_USER" "$GVM_HOME"
-echo "Diretório de fontes '$SOURCE_DIR' está pronto."
-echo ""
+print_success "Diretório de fontes '$SOURCE_DIR' preparado."
 
-# --- 2. Build do Front-end (como usuário GVM) ---
-echo "--- Executando o processo de build do Node.js como usuário '$GVM_USER' ---"
+# --- 2. Build do Front-end ---
+print_info "Iniciando build do Node.js como usuário '$GVM_USER' (isso pode demorar)..."
 
-# Usa "Here Document" para executar o build no ambiente do usuário gvm
+# Executa o bloco de comandos como usuário gvm
 sudo -Hiu "$GVM_USER" GSA_VERSION="$GSA_VERSION" bash << 'EOF'
-    set -e # Para o script se qualquer comando falhar
+  set -e
+  
+  # Carrega o NVM e Node
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-    # Carrega o NVM, Node e NPM no ambiente do shell
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  SOURCE_DIR="$HOME/gvm-source"
+  TARBALL_NAME="gsa-v${GSA_VERSION}.tar.gz"
+  SOURCE_FOLDER="gsa-${GSA_VERSION}"
 
-    # Define variáveis internas
-    SOURCE_DIR="$HOME/gvm-source"
-    TARBALL_NAME="gsa-v${GSA_VERSION}.tar.gz"
-    SOURCE_FOLDER="gsa-${GSA_VERSION}"
+  cd "$SOURCE_DIR"
 
-    cd "$SOURCE_DIR"
+  echo -e "\033[0;34mℹ   1. Baixando GSA v${GSA_VERSION}...\033[0m"
+  wget -q "https://github.com/greenbone/gsa/archive/refs/tags/v${GSA_VERSION}.tar.gz" -O "$TARBALL_NAME"
 
-    echo "1. Baixando gsa versão ${GSA_VERSION}..."
-    wget "https://github.com/greenbone/gsa/archive/refs/tags/v${GSA_VERSION}.tar.gz" -O "$TARBALL_NAME"
+  echo -e "\033[0;34mℹ   2. Extraindo arquivos...\033[0m"
+  rm -rf "$SOURCE_FOLDER"
+  tar xzf "$TARBALL_NAME"
+  cd "$SOURCE_FOLDER"
 
-    echo "2. Extraindo o arquivo..."
-    rm -rf "$SOURCE_FOLDER"
-    tar xzf "$TARBALL_NAME"
-    cd "$SOURCE_FOLDER"
+  echo -e "\033[0;34mℹ   3. Instalando dependências (npm install)...\033[0m"
+  npm install > /dev/null 2>&1
 
-    echo "3. Instalando dependências do Node.js com 'npm install' (isso pode levar alguns minutos)..."
-    npm install
-
-    echo "4. Executando o build de produção com 'npm run build'..."
-    npm run build
+  echo -e "\033[0;34mℹ   4. Gerando build de produção (npm run build)...\033[0m"
+  npm run build > /dev/null 2>&1
 EOF
 
-# Captura o status de saída do bloco de build
-BUILD_STATUS=$?
+# --- 3. Instalação ---
+print_info "Instalando arquivos estáticos no diretório web..."
 
-# --- 3. Instalação dos Arquivos (como root) ---
-if [ $BUILD_STATUS -eq 0 ]; then
-    echo ""
-    echo "--- Build concluído com sucesso. Iniciando a instalação dos arquivos web ---"
+mkdir -p "$INSTALL_DIR"
+# Limpeza segura do diretório antigo
+rm -rf "${INSTALL_DIR:?}/"*
 
-    echo "1. Criando o diretório de destino: $INSTALL_DIR..."
-    mkdir -p "$INSTALL_DIR"
+SOURCE_FOLDER="gsa-${GSA_VERSION}"
+cp -r "$SOURCE_DIR/$SOURCE_FOLDER/build/"* "$INSTALL_DIR"
+chown -R "$GVM_USER:$GVM_USER" "$INSTALL_DIR"
 
-    echo "2. Limpando o diretório de destino antigo..."
-    # A sintaxe {:?} previne um 'rm -rf /*' acidental se a variável estiver vazia
-    rm -rf "${INSTALL_DIR:?}/"*
-
-    echo "3. Copiando os novos arquivos de build..."
-    cp -r "$SOURCE_DIR/$SOURCE_FOLDER/build/"* "$INSTALL_DIR"
-
-    echo "4. Ajustando permissões dos arquivos instalados..."
-    chown -R gvm:gvm "$INSTALL_DIR"
-
-    echo ""
-    echo "================================================="
-    echo " gsa versão ${GSA_VERSION} instalado com sucesso!"
-    echo "================================================="
-else
-    echo ""
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "!!! ERRO durante o processo de build do GSA.  !!!"
-    echo "!!! Verifique as mensagens de erro acima.     !!!"
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    exit 1
-fi
+# --- Conclusão ---
+echo ""
+print_warning "========================================================================"
+print_success " Interface GSA v${GSA_VERSION} instalada com sucesso!"
+echo ""
+print_info " Resumo das Ações:"
+echo "   - Download e extração do código-fonte front-end."
+echo "   - Build do projeto Node.js concluído."
+echo "   - Arquivos instalados em $INSTALL_DIR."
+print_warning "========================================================================"
