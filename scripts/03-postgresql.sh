@@ -116,7 +116,7 @@ else
 fi
 
 print_info "Concedendo permissões de DBA ao usuário 'gvm'..."
-sudo -Hiu postgres psql gvmd -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dba') THEN CREATE ROLE dba WITH SUPERUSER NOINHERIT; END IF; END \$\$;"
+sudo -Hiu postgres psql gvmd -c "DO \$\$\$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dba') THEN CREATE ROLE dba WITH SUPERUSER NOINHERIT; END IF; END \$\$\$\$;"
 sudo -Hiu postgres psql gvmd -c "GRANT dba TO gvm;"
 print_success "Permissões de superusuário concedidas a 'gvm'."
 echo ""
