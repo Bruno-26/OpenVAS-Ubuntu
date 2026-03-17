@@ -59,19 +59,36 @@ print_success "Instalador do NVM executado."
 print_info "Instalando Node.js LTS (Long-Term Support)..."
 
 # Carrega nvm e instala node lts
-sudo -Hiu gvm bash -c '
+sudo -Hiu gvm bash <<'NODEINSTALL'
   export NVM_DIR="$HOME/.nvm"
-  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    source "$NVM_DIR/nvm.sh"
+  fi
   nvm install --lts
   nvm alias default "lts/*"
-'
+NODEINSTALL
 print_success "Node.js LTS instalado com sucesso."
 
 # --- 4. Verificação ---
 print_info "Verificando as versões instaladas..."
 
-NODE_VER=$(sudo -Hiu gvm bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"; node -v')
-NPM_VER=$(sudo -Hiu gvm bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"; npm -v')
+NODE_VER=$(sudo -Hiu gvm bash <<'NODEVER'
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  source "$NVM_DIR/nvm.sh"
+fi
+node -v
+NODEVER
+)
+
+NPM_VER=$(sudo -Hiu gvm bash <<'NPMVER'
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  source "$NVM_DIR/nvm.sh"
+fi
+npm -v
+NPMVER
+)
 
 print_success "Node.js: $NODE_VER"
 print_success "NPM: $NPM_VER"
