@@ -54,12 +54,12 @@ print_info "Iniciando build do Node.js como usuário '$GVM_USER' (isso pode demo
 # Executa o bloco de comandos como usuário gvm
 sudo -Hiu "$GVM_USER" GSA_VERSION="$GSA_VERSION" bash << 'EOF'
   set -e
-  
+
   # Carrega o NVM e Node
   export NVM_DIR="$HOME/.nvm"
   [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-  SOURCE_DIR="$HOME/gvm-source"
+  SOURCE_DIR="/opt/gvm/gvm-source"
   TARBALL_NAME="gsa-v${GSA_VERSION}.tar.gz"
   SOURCE_FOLDER="gsa-${GSA_VERSION}"
 
