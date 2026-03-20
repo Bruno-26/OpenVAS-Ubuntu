@@ -57,7 +57,9 @@ sudo -Hiu "$GVM_USER" GSA_VERSION="$GSA_VERSION" bash << 'EOF'
 
   # Carrega o NVM e Node
   export NVM_DIR="$HOME/.nvm"
-  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    source "$NVM_DIR/nvm.sh"
+  fi
 
   SOURCE_DIR="/opt/gvm/gvm-source"
   TARBALL_NAME="gsa-v${GSA_VERSION}.tar.gz"
@@ -73,11 +75,11 @@ sudo -Hiu "$GVM_USER" GSA_VERSION="$GSA_VERSION" bash << 'EOF'
   tar xzf "$TARBALL_NAME"
   cd "$SOURCE_FOLDER"
 
-  echo -e "\033[0;34mℹ   3. Instalando dependências (npm install)...\033[0m"
-  npm install > /dev/null 2>&1
+  echo -e "\033[0;34mℹ   3. Instalando dependências (npm install - isso pode demorar vários minutos)...\033[0m"
+  npm install
 
-  echo -e "\033[0;34mℹ   4. Gerando build de produção (npm run build)...\033[0m"
-  npm run build > /dev/null 2>&1
+  echo -e "\033[0;34mℹ   4. Gerando build de produção (npm run build - isso pode demorar vários minutos)...\033[0m"
+  npm run build
 EOF
 
 # --- 3. Instalação ---
