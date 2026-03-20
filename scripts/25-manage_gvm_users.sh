@@ -4,14 +4,15 @@
 # Script: 25-manage_gvm_users.sh
 #
 # Propósito:
-# 1. Menu interativo para gestão de usuários do GVM.
-# 2. Criação do usuário administrador padrão 'admin'.
-# 3. Criação de novos usuários com senhas personalizadas.
-# 4. Alteração de senhas de usuários existentes.
+# 1. Cria automaticamente o usuário administrador padrão 'admin'
+#    com senha aleatória gerada pelo gvmd.
+# 2. Exibe a senha gerada ao final do script para que o
+#    administrador possa anotá-la.
 # ==================================================================
 
 # --- Configurações de Segurança e Estilo ---
-# Nota: set -e não é usado aqui para permitir que o menu continue em caso de erro de digitação
+set -e
+set -o pipefail
 source "$(dirname "$0")/../style.sh"
 
 # --- Verificação de Privilégios ---
@@ -24,76 +25,51 @@ GVMD_BIN="/usr/local/sbin/gvmd"
 DEFAULT_USER="admin"
 
 if [ ! -x "$GVMD_BIN" ]; then
-  print_error "Executável gvmd não encontrado."
+  print_error "Executável gvmd não encontrado em '$GVMD_BIN'."
   exit 1
 fi
 
-# --- Funções Auxiliares ---
+# --- Função Auxiliar ---
 user_exists() {
-  sudo -Hiu gvm "$GVMD_BIN" --get-users --verbose | grep -q "^$1 "
+  sudo -Hiu gvm "$GVMD_BIN" --get-users --verbose 2>/dev/null | grep -q "^$1 "
 }
 
-# --- Menu Principal ---
-while true; do
-  echo ""
-  print_warning "------------------------------------------------------------"
-  print_info "       Menu de Gerenciamento de Usuários GVM"
-  print_warning "------------------------------------------------------------"
-  echo "  1. Criar usuário 'admin' padrão (senha aleatória)"
-  echo "  2. Criar novo usuário (senha personalizada)"
-  echo "  3. Alterar senha de usuário existente"
-  echo "  4. Sair"
-  print_warning "------------------------------------------------------------"
-  read -p "  Escolha uma opção [1-4]: " choice
+# --- Criação do Usuário Admin ---
+print_info "Verificando se o usuário 'admin' já existe..."
 
-  case $choice in
-    1)
-      print_info "Criando usuário 'admin'..."
-      if user_exists "$DEFAULT_USER"; then
-        print_warning "Usuário '$DEFAULT_USER' já existe. Use a opção 3."
-      else
-        sudo -Hiu gvm "$GVMD_BIN" --create-user="$DEFAULT_USER"
-        print_success "Usuário '$DEFAULT_USER' criado."
-      fi
-      ;;
-    2)
-      read -p "  Nome do novo usuário: " new_user
-      if [ -z "$new_user" ]; then print_error "Nome vazio."; continue; fi
-      
-      if user_exists "$new_user"; then
-        print_warning "Usuário já existe."
-      else
-        read -s -p "  Senha para '$new_user': " p1; echo ""
-        read -s -p "  Confirme a senha: " p2; echo ""
-        if [ "$p1" == "$p2" ]; then
-          sudo -Hiu gvm "$GVMD_BIN" --create-user="$new_user" --password="$p1"
-          print_success "Usuário '$new_user' criado."
-        else
-          print_error "Senhas não coincidem."
-        fi
-      fi
-      ;;
-    3)
-      read -p "  Nome do usuário: " user
-      if user_exists "$user"; then
-        read -s -p "  Nova senha para '$user': " p1; echo ""
-        read -s -p "  Confirme a senha: " p2; echo ""
-        if [ "$p1" == "$p2" ]; then
-          sudo -Hiu gvm "$GVMD_BIN" --user="$user" --new-password="$p1"
-          print_success "Senha alterada com sucesso."
-        else
-          print_error "Senhas não coincidem."
-        fi
-      else
-        print_error "Usuário não encontrado."
-      fi
-      ;;
-    4)
-      print_info "Saindo..."
-      break
-      ;;
-    *)
-      print_error "Opção inválida."
-      ;;
-  esac
-done
+if user_exists "$DEFAULT_USER"; then
+  print_warning "O usuário '$DEFAULT_USER' já existe no sistema."
+  print_info "Se precisar alterar a senha, use a ferramenta: ./gvm_user_manager_tool.sh"
+  echo ""
+else
+  print_info "Criando usuário '$DEFAULT_USER' com senha aleatória..."
+
+  # Captura a saída completa do comando
+  CREATE_OUTPUT=$(sudo -Hiu gvm "$GVMD_BIN" --create-user="$DEFAULT_USER" 2>&1)
+
+  # Extrai a senha gerada (formato: "User created with password 'SENHA'.")
+  ADMIN_PASSWORD=$(echo "$CREATE_OUTPUT" | grep -oP "(?<=password ').*(?=')")
+
+  if [ -n "$ADMIN_PASSWORD" ]; then
+    echo ""
+    print_success "Usuário '$DEFAULT_USER' criado com sucesso!"
+    echo ""
+    print_warning "========================================================================"
+    print_warning "  CREDENCIAIS DO USUÁRIO ADMINISTRADOR"
+    print_warning "========================================================================"
+    echo ""
+    printf "  %-15s: %s\n" "Usuário" "$DEFAULT_USER"
+    printf "  %-15s: %s\n" "Senha" "$ADMIN_PASSWORD"
+    echo ""
+    print_warning "========================================================================"
+    print_info "  IMPORTANTE: Anote estas credenciais em local seguro!"
+    print_info "  Para gerenciar usuários posteriormente, use: ./gvm_user_manager_tool.sh"
+    print_warning "========================================================================"
+    echo ""
+  else
+    print_error "Falha ao criar o usuário '$DEFAULT_USER'."
+    print_info "Saída do comando:"
+    echo "$CREATE_OUTPUT"
+    exit 1
+  fi
+fi

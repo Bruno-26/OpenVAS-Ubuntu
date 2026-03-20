@@ -108,7 +108,7 @@ Os scripts são executados na seguinte ordem:
 22-setup_feed_validation.sh # Configura validação de feeds
 23-setup_services.sh        # Configura serviços systemd
 24-setup_gvm_scanner.sh     # Configura scanner
-25-manage_gvm_users.sh      # Gerencia usuários GVM
+25-manage_gvm_users.sh      # Cria usuário admin automaticamente
 26-set_feed_owner.sh        # Define proprietário dos feeds
 27-check_gvm_access.sh      # Verifica acesso ao GVM
 ```
@@ -119,7 +119,26 @@ Após a instalação:
 
 - **Usuário PostgreSQL**: `postgres`
 - **Senha PostgreSQL**: `pgadmin`
-- **Usuário GVM**: Criado durante etapa 25 (interativo)
+- **Usuário GVM Admin**: `admin`
+- **Senha GVM Admin**: Gerada automaticamente e exibida ao final da etapa 25
+
+⚠️ **IMPORTANTE**:
+- Anote a senha do usuário `admin` exibida durante a instalação!
+- Altere as credenciais padrão em ambiente de produção!
+
+## 🛠️ Gerenciamento de Usuários GVM
+
+Para criar novos usuários ou alterar senhas após a instalação:
+
+```bash
+sudo ./gvm_user_manager_tool.sh
+```
+
+Este script oferece um menu interativo para:
+- Listar todos os usuários cadastrados
+- Criar novos usuários com senhas personalizadas
+- Alterar senhas de usuários existentes
+- Criar usuário 'admin' com senha aleatória (se ainda não existir)
 
 ⚠️ **IMPORTANTE**: Altere as credenciais padrão em ambiente de produção!
 
